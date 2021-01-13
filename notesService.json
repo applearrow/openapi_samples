@@ -1,0 +1,1335 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Notes Service",
+    "version": "1.0",
+    "description": "SBC Accounting - Notes Domain",
+    "contact": {
+      "name": "Alan Jackson",
+      "email": "alan.jackson@sage.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.notes.common.sbc-sandbox.com",
+      "description": "Sandbox"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Notes",
+      "description": "Endpoints related with Notes interactions"
+    },
+    {
+      "name": "Services",
+      "description": "Endpoints related with Services registration"
+    }
+  ],
+  "paths": {
+    "/v1/tenant/{TenantId}/{OwningTypeName}/{OwningObjectId}": {
+      "parameters": [
+        {
+          "name": "TenantId",
+          "in": "path",
+          "description": "The unique identifier of a tenant to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "required": true
+        },
+        {
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "type": "string",
+          "name": "OwningTypeName",
+          "in": "path",
+          "required": true,
+          "description": "The Owner Type Name that this note will apply to"
+        },
+        {
+          "name": "OwningObjectId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of an owning object to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "delete": {
+        "summary": "Delete all notes from the system for a given object",
+        "operationId": "V1/Object/Delete",
+        "x-sbc-acceptance-criteria": [
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If a user without a role to modify notes from other users tries to delete a note he does not own, then return a 403 code",
+          "If no OwningTypeType can be found registered in the system for the given ServiceName, then return a 404 return code",
+          "If no notes are found for the given combination of Owner Type and Object Id, the return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "All notes for the given combination of Owner Type and Object Id should be deleted",
+          "When a Note is Deleted, a Domain Event must be raised to signify that the Note has been deleted"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-access-control": "Notes/DeleteNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "false",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant is unknown/not active or Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. Unknown Note.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notes"
+        ],
+        "description": "Delete the specified note from the system",
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ]
+      }
+    },
+    "/v1/tenant/{TenantId}/{OwningTypeName}/{OwningObjectId}/Notes": {
+      "parameters": [
+        {
+          "type": "string",
+          "name": "TenantId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of a tenant to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": "string",
+          "name": "OwningTypeName",
+          "in": "path",
+          "required": true,
+          "description": "The Owner Type Name that this note will apply to",
+          "minLength": 1
+        },
+        {
+          "name": "OwningObjectId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of an owning object to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "V1 - Get Notes for a specific Object",
+        "description": "Get all notes for a specific instance of an object type",
+        "tags": [
+          "Notes"
+        ],
+        "operationId": "V1/Notes/Get",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "X-Pagination-TotalPages": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Total number of pages available.",
+                "required": true
+              },
+              "X-Pagination-CurrentPage": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Current page of results.",
+                "required": true
+              },
+              "X-Pagination-TotalItems": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "description": "Total number of available items.",
+                "required": true
+              },
+              "X-Pagination-ItemsPerPage": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 25,
+                  "maximum": 500
+                },
+                "description": "Number of items returned per page.",
+                "required": true
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/Notes/V1/GetNotes/responsemodel.v1.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant is unknown/not active or Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "x-sbc-cache": {
+          "TTL": 900,
+          "Key": "notes:GetNotes:{TenantId}:{OwningObjectTypeName}:{OwningObjectIdId}:{page}:{page-items}"
+        },
+        "x-sbc-acceptance-criteria": [
+          "When no Notes are found return an empty collection",
+          "Only Notes related to the given TenantId/Owning Object Type Id/Owning Object Id should be returned",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If no OwningTypeName can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "The Notes will always be returned with the most recent notes first",
+          "No filtering based on the content of the Notes will be provided by the API",
+          "The CreatedBy and UpdatedBy values are to be taken from the NoteUsers table.",
+          "The CreatedBy and UpdatedBy values should be the concatenation of the First and Last names of the user",
+          "If the user has updated their name, the CreatedBy and UpdatedBy values should take the current value from the NoteUsers table, so the name displayed is updated"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-access-control": "Notes/ReadNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "true",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": "1",
+              "maximum": 2147483647
+            },
+            "in": "query",
+            "name": "page",
+            "description": "The page of results to request."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 25,
+              "maximum": 500,
+              "default": "25"
+            },
+            "in": "query",
+            "name": "page-items",
+            "description": "The number of records to return per page."
+          }
+        ],
+        "security": [
+          {
+            "CloudId": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "V1 - Note Create",
+        "description": "Create a new note for the given owner object id",
+        "operationId": "V1/Notes/Create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../common/models/api/Notes/V1/CreateNote/requestmodel.v1.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/recordcreated.v1.json"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The relative uri to the created record",
+                "required": true
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant is unknown/not active or Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity. Unable to create record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-access-control": "Notes/CreateNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "true",
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-acceptance-criteria": [
+          "The defined Note should be created.",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "If the title of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "If the body of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "The length of the note should be compared to a system-wide setting defining the maximum length of a note",
+          "If the length of the note is greater than the defined setting, then return a 422 status code",
+          "The value of the maximum length should be stored in the Param Store",
+          "When a Note is Created, a Domain Event must be raised to signify that the Note has been Created",
+          "When a new note is created, the CreatedAt value should be set to the current timestamp",
+          "When a new note is created, the CreatedBy value should be set to the principal that created the record",
+          "When a user is mentioned, it will create a record on NoteMentions table "
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "Idempotency Key"
+          }
+        ],
+        "tags": [
+          "Notes"
+        ]
+      }
+    },
+    "/v1/tenant/{TenantId}/{OwningTypeName}/{OwningObjectId}/Notes/{NoteId}": {
+      "parameters": [
+        {
+          "type": "string",
+          "name": "TenantId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of a tenant to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "name": "OwningTypeName",
+          "in": "path",
+          "required": true,
+          "description": "The Name of the type that is registered with the Notes Service"
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "OwningObjectId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of the Owning Object to which the Note is attached"
+        },
+        {
+          "type": "string",
+          "name": "NoteId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": "The unique identifier of this note"
+        }
+      ],
+      "get": {
+        "summary": "V1 - Get Note by Id",
+        "tags": [
+          "Notes"
+        ],
+        "operationId": "V1/Notes/GetById",
+        "description": "Get the specified note by Id",
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-cache": {
+          "TTL": 900,
+          "Key": "notes:GetNoteById:{TenantId}:{OwningTypeName}:{OwningObjectId}:{NoteId}"
+        },
+        "x-sbc-acceptance-criteria": [
+          "If the specified Note cannot be found, return a 404 status code",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "When a Note is updated, a Domain Event must be raised to signify that the Note has been changed"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-access-control": "Notes/ReadNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "true",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/Notes/V1/GetNoteById/responsemodel.v1.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant or client is unknown/not active or caller does not have permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. Unknown Note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+        ]
+      },
+      "put": {
+        "summary": "V1 - Note Update",
+        "operationId": "V1/Notes/Update",
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-cache": {
+          "TTL": 900,
+          "Key": "notes:GetNotes:{TenantId}:{NoteId}"
+        },
+        "x-sbc-acceptance-criteria": [
+          "If the specified Note cannot be found, return a 404 status code",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If a user without policies to modify notes from other users tries to update a note he does not own, then return a 403 code",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "If the title of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "If the body of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "The length of the note should be compared to a system-wide setting defining the maximum length of a note",
+          "If the length of the note is greater than the defined setting, then return a 422 status code",
+          "When a Note is updated, a Domain Event must be raised to signify that the Note has been changed",
+          "When a note is updated, the CreatedAt and CreatedBy values must not change",
+          "When a note is updated, the UpdatedAt value must be updated to the current timestamp at the point of update",
+          "When a note is updated, the UpdatedBy value should be updated to the current princpal performing the updated",
+          "When a note is updated, the Mentions value should be updated with the note content",
+          "When a note is updated, notifications will be sent to people that was not mentioned before",
+          "When a response note is updated (note with ThreadId), the people mentioned should be added into parent's mentions"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-access-control": "Notes/UpdateNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "true",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../common/models/api/Notes/V1/UpdateNote/requestmodel.v1.json"
+              }
+            }
+          },
+          "description": ""
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/Notes/V1/GetNoteById/responsemodel.v1.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant or Client is unknown/not active or Caller does not have permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. Unknown Note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity. Unable to Update the Note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notes"
+        ],
+        "description": "Update the specified note",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ]
+      },
+      "delete": {
+        "summary": "V1 - Note Delete",
+        "operationId": "V1/Notes/Delete",
+        "x-sbc-acceptance-criteria": [
+          "If the specified Note cannot be found, return a 404 status code",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If a user without privileges to modify notes from other users tries to delete notes and among these selected notes there is at least one note not owned by him, then return a 403 code and none of the notes will be deleted",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "If business logic prevents a note from being deleted, return a 409 status code",
+          "When a Note is Deleted, a Domain Event must be raised to signify that the Note has been deleted",
+          "When a Note is deleted, the DeletedAt value should be set to the current timestamp",
+          "When a Note is deleted, the DeletedBy value should be set to the name of the principal performing the delete",
+          "When a Note is deleted, the CreatedAt, CreatedBy, UpdatedAt and UpdatedBy values must not change"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId]"
+        ],
+        "x-sbc-access-control": "Notes/DeleteNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "false",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant is unknown/not active or Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. Unknown Note.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Note cannot be deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Notes"
+        ],
+        "description": "Delete the specified note from the system",
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ]
+      }
+    },
+    "/v1/tenant/{TenantId}/{OwningTypeName}/{OwningObjectId}/Notes/{NoteId}/Responses": {
+      "parameters": [
+        {
+          "name": "TenantId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of a tenant to which the notes apply.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "OwningTypeName",
+          "in": "path",
+          "required": true,
+          "description": "The Name of the type that is registered with the Notes Service",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "OwningObjectId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of the Owning Object to which the Note is attached"
+        },
+        {
+          "type": "string",
+          "name": "NoteId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": "The unique identifier of this note"
+        }
+      ],
+      "get": {
+        "summary": "V1 - Get All Messages from a thread",
+        "tags": [
+          "Notes"
+        ],
+        "operationId": "V1/Notes/GetMessagesByThread",
+        "description": "Get all the messages from a thread",
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-cache": {
+          "TTL": 900,
+          "Key": "notes:GetMessagesByThread:{TenantId}:{OwningTypeName}:{OwningObjectId}:{NoteId}"
+        },
+        "x-sbc-acceptance-criteria": [
+          "If the specified Note cannot be found, return a 404 status code",
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "Any note that is deleted (with deletedAt field) should return no content",
+          "Select all responses with threadId as OwningObjectType + OwningObjectId composition to get all the responses"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId, NoteId]"
+        ],
+        "x-sbc-access-control": "Notes/ReadNote",
+        "x-sbc-available": "false",
+        "x-sbc-pending-changes": "false",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/Notes/V1/GetNotes/responsemodel.v1.json"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant or client is unknown/not active or caller does not have permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. Unknown Note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ]
+      },
+      "post": {
+        "summary": "V1 - Respond to Thread",
+        "tags": [
+          "Notes"
+        ],
+        "description": "Add a response to a message using Id",
+        "operationId": "V1/Notes/RespondToMessage",
+        "responses": {
+          "201": {
+            "description": "Created Note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/recordcreated.v1.json"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The relative uri to the created record",
+                "required": true
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated with CloudId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Tenant is unknown/not active or Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity. Unable to create record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-acceptance-criteria": [
+          "A Hashed value of the OwningTypeName should be used to access the OwnerTypeId from the OwnerTypes table",
+          "If no OwningTypeType can be found registered in the system then return a 404 return code",
+          "Any OwnerObjectTypes that have their IsActive flag set to false should be ignored in the queries",
+          "If no note exists with NoteId then return a 404 return code",
+          "If the title of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "If the body of the Note is deemed to be HTML or Javascript the suspicious tag will be stripped and the request will continue with the new values",
+          "The length of the note should be compared to a system-wide setting defining the maximum length of a note",
+          "If the length of the note is greater than the defined setting, then return a 422 status code",
+          "The value of the maximum length should be stored in the Param Store",
+          "When a Note is Created, a Domain Event must be raised to signify that the Note has been Created",
+          "When a new note is created, the CreatedAt value should be set to the current timestamp",
+          "When a new note is created, the CreatedBy value should be set to the principal that created the record",
+          "When a new response is created, the thread Id of this response is the NoteId in endpoint",
+          "When a new response is created, the people mentioned should be added into parent's mentions"
+        ],
+        "x-sbc-access-control": "Notes/CreateNote",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "false",
+        "x-sbc-cache-dependencies": [
+          "Notes[TenantId, OwningTypeName, OwningObjectId, NoteId]"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "Idempotency Key"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../common/models/api/Notes/V1/CreateNote/requestmodel.v1.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/Register": {
+      "post": {
+        "summary": "Register Objects from another service to create Notes",
+        "operationId": "v1/Register",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Services"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ],
+        "x-sbc-acceptance-criteria": [
+          "If a service does NOT already exist for the same Service.Name then a new Service should be created",
+          "For the given Service.Name, create an Owning Object Type that is linked to the Service through the Service Id",
+          "If the given service already exists, a new service record should not be created",
+          "The given service name should be unique across the entire system, include environment if appropriate",
+          "Each given object type name must be unique across the entire system regardless of the service that registered it, include environment if appropriate",
+          "If a given object type name has been registered for a different service, a 409 return status should be returned",
+          "If all the given object type names already exist in the database for this service, then no errors should be raised",
+          "All of the given object type names should be checked to ensure they are in the database for the relevant service",
+          "Any of the object type names that are not registered for the service that are not already in the database should be created",
+          "The caller of this method should not be aware of new records were created as a result of this call or whether all the records already existed",
+          "A success response should be returned where all processing of the object names was successful",
+          "If the service making the call is not authenticated to make calls to the Notes service, a 401 status should be returned",
+          "If the caller does not have permission to create Service records or Owning Object Type records then a 403 status should be returned",
+          "If the body of the request does not match the required schema, then a 400 status should be returned",
+          "When registering an owning type, the IsActive flag should be set to true",
+          "When registering an owning type, if the type exists and is inactive, then the IsActive flag should be reset to true",
+          "When registering an owning type, a new Owning Object context will be created. It will be a hash of the composite owning object id and type"
+        ],
+        "x-sbc-cache-dependencies": [
+          "Services"
+        ],
+        "x-sbc-access-control": "Service/Register",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "false",
+        "description": "Provide a collection of Object Type Names that will be allowed to have Notes stored for them",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../common/models/api/Register/V1/CreateRegistration/requestmodel.v1.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/Unregister": {
+      "post": {
+        "summary": "Unregister Objects from another service preventing them from creating Notes",
+        "operationId": "v1/Unregister",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized. Caller is not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. Caller does not have permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../common/models/api/errorresponse.v1.json"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "minLength": 20
+            },
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "description": "The idempotency key to use."
+          }
+        ],
+        "tags": [
+          "Services"
+        ],
+        "security": [
+          {
+            "CloudId": []
+          }
+        ],
+        "x-sbc-access-control": "Service/Unregister",
+        "x-sbc-available": "true",
+        "x-sbc-pending-changes": "false",
+        "x-sbc-cache-dependencies": [
+          "Services"
+        ],
+        "x-sbc-acceptance-criteria": [
+          "If the service specified does not already exist, then no further action will be required and a success response should be returned",
+          "If the service specified does exist, then each of the listed Object Type Names should be marked as inactive (IsActive = false) in the database",
+          "If any of the Object Type Names are not found in the database, then no error should be returned; they should be treated as though having previously been removed",
+          "Any Notes that have been created for the given object types should be left alone, it is the OwnerType that will become inactive",
+          "If the service specified has no remaining object types linked in the database, then the service record should also be removed",
+          "A success response should be returned where all processing of the object names was successful",
+          "If the service making the call is not authenticated to make calls to the Notes service, a 401 status should be returned",
+          "If the caller does not have permission to create Service records or Owning Object Type records then a 403 status should be returned",
+          "Each owner type that is found in the database should be marked as inactive (IsActive = false)"
+        ],
+        "description": "Provide a collection of Object Type Names that will be prevented from having Notes stored against them.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "../common/models/api/Unregister/V1/Unregister/requestsmodel.v1.json"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CloudId": {
+        "type": "openIdConnect",
+        "description": "CloudId.",
+        "openIdConnectUrl": "https://id-shadow.sage.com/.well-known/openid-configuration"
+      }
+    }
+  }
+}
